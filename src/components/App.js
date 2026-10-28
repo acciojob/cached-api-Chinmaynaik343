@@ -2,40 +2,42 @@
 import React, { useState, useEffect, useMemo } from "react";
 
 function App() {
+  const [userId, setUserId] = useState("1");
   const [posts, setPosts] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const apiUrl = "https://jsonplaceholder.typicode.com/posts";
-
-  // Cache the API URL based on the input
-  const cachedApiUrl = useMemo(() => apiUrl, [apiUrl]);
+  // Memoize the API URL based on the input
+  const apiUrl = useMemo(() => {
+    return userId
+      ? `https://jsonplaceholder.typicode.com/posts?userId=${userId}`
+      : "https://jsonplaceholder.typicode.com/posts";
+  }, [userId]);
 
   useEffect(() => {
-    let isMounted = true;
+    const controller = new AbortController();
 
     const fetchPosts = async () => {
       try {
         setLoading(true);
         setError("");
 
-        const response = await fetch(cachedApiUrl);
+        const response = await fetch(apiUrl, {
+          signal: controller.signal,
+        });
 
         if (!response.ok) {
           throw new Error("Failed to fetch posts");
         }
 
         const data = await response.json();
-
-        if (isMounted) {
-          setPosts(data);
-        }
+        setPosts(data);
       } catch (err) {
-        if (isMounted) {
-          setError(err.message || "Something went wrong");
+        if (err.name !== "AbortError") {
+          setError("Failed to load posts. Please try again.");
         }
       } finally {
-        if (isMounted) {
+        if (!controller.signal.aborted) {
           setLoading(false);
         }
       }
@@ -44,29 +46,36 @@ function App() {
     fetchPosts();
 
     return () => {
-      isMounted = false;
+      controller.abort();
     };
-  }, [cachedApiUrl]);
-
-  if (loading) {
-    return <h2>Loading...</h2>;
-  }
-
-  if (error) {
-    return <p>{error}</p>;
-  }
+  }, [apiUrl]);
 
   return (
     <div>
       <h1>Cached API Posts</h1>
 
-      {posts.map((post) => (
-        <div key={post.id}>
-          <h3>{post.title}</h3>
-          <p>{post.body}</p>
-          <hr />
-        </div>
-      ))}
+      <label htmlFor="userId">Enter User ID (1-10): </label>
+      <input
+        id="userId"
+        type="number"
+        min="1"
+        max="10"
+        value={userId}
+        onChange={(e) => setUserId(e.target.value)}
+      />
+
+      {loading && <p>Loading...</p>}
+      {error && <p>{error}</p>}
+
+      {!loading &&
+        !error &&
+        posts.map((post) => (
+          <div key={post.id}>
+            <h3>{post.title}</h3>
+            <p>{post.body}</p>
+            <hr />
+          </div>
+        ))}
     </div>
   );
 }
